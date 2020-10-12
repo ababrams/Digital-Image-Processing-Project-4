@@ -1,0 +1,10 @@
+Histogram values range from 0 - 255.
+0 - black
+255 - white
+
+Histograms depict the amount  of pixels the image has of a certain index value. The index representing the RGB pixel value of a gray scale image.
+The dark image has pixels occuring frequently and close together at the earlier indexes of the histogram. This remained the same for other images but occured in different indexes accordingly.
+
+Histogram equalization spreads the values of the pixels across the indexes. Depending on the original image these values never reach the total opposite side of the histogram, but the seperation gives the image higher pixel contrast. This improves the quality of the image as details vary more and are easier to see.
+
+Histogram matchingcontains the same amount of pixels in the indexes, but the indexes now match the histogram of the provided reference image. The target histogram for matching is the histogram of the high-contrast-image. It has the most wide spread histogram values with an even curve that when matched, enhances the quality of the other images.

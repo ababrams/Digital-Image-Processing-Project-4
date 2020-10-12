@@ -1,0 +1,29 @@
+Program requires directory with images provided by Dr. Gudivada in them.
+
+Test1:
+Execute program without directory passed as argument.
+
+Result: Console output "No directory submitted".
+
+Test2:
+Execute program with empty directory.
+
+Result: Console output "Directory does not exist."
+
+Test3:
+Execute program with empty directory.
+
+Result: Console output "No images were found in directory"
+
+Test4:
+Execute program without .tif files in directory
+
+Result: "No images found in directory"
+
+Test5:
+Wrong keys pressed during JFrame operation
+
+Result: Nothing occurs as the only keys with listeners are the ones detailed in the ReadMe
+
+These are only types of tests conducted for program. The rest of the program is self contained and cannot deviate from normal operation if the requirements are meet.
+
