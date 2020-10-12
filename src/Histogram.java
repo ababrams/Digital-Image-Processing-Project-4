@@ -2,18 +2,16 @@ import java.awt.Color;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.image.BufferedImage;
+import java.awt.image.WritableRaster;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.List;
-
 import javax.imageio.ImageIO;
 import javax.swing.ImageIcon;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 
 import org.opencv.core.Core;
-import org.opencv.core.Point;
 
 /**
  *	This program reads image files from directory, converts each image to gray scale, performs histogram equalization,
@@ -50,8 +48,8 @@ public class Histogram {
 	}
 	
 	/*
-	 * Reads directory for .tif images, calls convert to create buffered images, adds images to collection, and generates
-	 * image metadata.
+	 * Reads directory for .tif images, calls convert to create gray scale buffered images, 
+	 * adds images to collection, and generates image metadata.
 	 * Note: images that are not .tif will be ignored.
 	 * parameter: Directory
 	 */
@@ -59,7 +57,9 @@ public class Histogram {
 	    if(dir.exists() && dir.listFiles().length > 0) {
 	    	for (File f : dir.listFiles()) {
 	    		if(f.toString().endsWith(".tif")) {
+	    			// convert to gray scale
 	    			BufferedImage i = convert(bufImage(f));
+	    			// add to image collection and metadata
 	    			bufImage.add(i);
 	    			labels.add(f.toString().replace(dir.toString() + "/", ""));
 	    		}
@@ -99,6 +99,7 @@ public class Histogram {
 				
 		int width = img.getWidth();
 		int height = img.getHeight();
+		BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
 		
 		// get current color of pixel, convert colors to equal gray, and set pixel to new color
 		for(int i = 0; i < width; i++) {
@@ -106,10 +107,10 @@ public class Histogram {
 				Color c = new Color(img.getRGB(i, j));
 				int color = (c.getRed() + (2 * c.getGreen()) + c.getBlue())/4;
 				Color gray = new Color(color, color, color);
-				img.setRGB(i, j, gray.getRGB());
+				result.setRGB(i, j, gray.getRGB());
 			}
 		}
-		return img;
+		return result;
 	}
 	
 	/*
@@ -117,18 +118,18 @@ public class Histogram {
 	 * parameter: image
 	 * returns: histogram array
 	 */
-	public static double[] hist(BufferedImage img) {
+	public static int[] hist(BufferedImage img) {
 		int width = img.getWidth();
 		int height = img.getHeight();
-		double [] h = new double[256];
+		int [] h = new int[256];
 		
-		for(int i = 0; i < h.length; i++) {
-			h[i] = 0;	
-		}
-		
+		// create raster for pixel manipulation
+		WritableRaster imgR = img.getRaster();
+
+		// incrementally increase histogram index from pixel gray scale value
 		for(int i = 0; i < width; i++) {
 			for(int j = 0; j < height; j++) {
-				int pixel = img.getRGB(i, j) & 0xFF;
+				int pixel = imgR.getSample(i, j, 0);
 				h[pixel]++;		
 			}
 		}
@@ -136,60 +137,54 @@ public class Histogram {
 	}
 	
 	/*
-	 * normalizes the gray scale image histogram
-	 * parameter: gray scale image
-	 * returns: normalized histogram array
-	 */
-	public static double[] normalize(BufferedImage img) {
-		double[] h = hist(img);
-		double[] result = new double[h.length];
-		int numPixels = img.getHeight() * img.getWidth();
-		
-		for(int i = 0; i < h.length; i++) {
-			result[i] = h[i] / numPixels;
-		}		
-		return result;
-	}
-	
-	/*
 	 * calculates cumulative sum of gray scale normalized histogram
-	 * paramters: normalized histogram
-	 * return: cumulative sum of normalized histogram
+	 * paramters: histogram
+	 * return: cumulative sum of histogram
 	 */
-	public static double[] cumulativeSum(double[] h) {
-		double[] cdf = new double[h.length];
+	public static int[] cumulativeSum(int[] h) {
+		int[] cdf = new int[256];
 		
 		cdf[0] = h[0];
 		
-		for(int i = 1; i < h.length - 1; i++) {
+		for(int i = 1; i < 256; i++) {
 			cdf[i] = cdf[i -1] + h[i];
 		}
-		
 		return cdf;
 	}
-	
+
 	/*
-	 * Applies histogram equalization to image by normalizing histogram, and applying cumulative distribution function.
+	 * Applies histogram equalization to image by normalizing histogram, applying cumulative distribution function,
+	 * and scaling the value to within a 255 value range.
 	 * paramter: gray scale image
 	 * returns: image with equalized histogram
 	 */
-	public static BufferedImage equalize(BufferedImage img) {
-		double[] h = normalize(img);
-		double[] c = cumulativeSum(h);
+	public static BufferedImage equalize(BufferedImage img){
 		int width = img.getWidth();
 		int height = img.getHeight();
+		int numPixels = width * height;
 		
-		BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-				
-		for(int i = 0; i < width; i++) {
-			for(int j = 0; j < height; j++) {
-				result.setRGB(i,j, (int) Math.round(255 * c[img.getRGB(i,j) & 0xFF]));
-			}
-		}
-		
-		result = convert(result);
-		
-		return result;
+		// create blank image for pixel to be set to equalized value
+	    BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
+	    WritableRaster imgR = img.getRaster();
+	    WritableRaster resR= result.getRaster();
+	    int[] h = hist(img);
+	    int[] cdf = cumulativeSum(h);
+
+	    // equalize formula
+	    float[] eq = new float[256];
+	    for(int i=0;i<256;i++){
+	        eq[i] =  (float)((cdf[i]*255.0)/(float)numPixels);
+	    }
+
+	    // set blank image pixel to equalized values
+	    for (int x = 0; x < width; x++) {
+	        for (int y = 0; y < height; y++) {
+	            int pixel = (int) eq[imgR.getSample(x, y, 0)];
+	            resR.setSample(x, y, 0, pixel);
+	        }
+	    }
+	    result.setData(resR);
+	    return result;
 	}
 	
 	/*
@@ -198,34 +193,42 @@ public class Histogram {
 	 * paramters: gray scale image, target histogram to be matched
 	 * returns: image that has histogram closely matching the target 
 	 */
-	public static BufferedImage match(BufferedImage img, double[] h) {
-		double [] hist = normalize(img);
-		double[] cdf = cumulativeSum(hist);
-		double[] cdfRef = cumulativeSum(h);
-		double[] lt = new double[256];
+	public static BufferedImage match(BufferedImage img, int[] h) {
+		int[] hist = hist(img);
+		int[] cdf = cumulativeSum(hist);
+		int[] cdfRef = cumulativeSum(h);
+		int[] lt = new int[256];
 		int width = img.getWidth();
 		int height = img.getHeight();
-		int pix = 0;
-		BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+		BufferedImage result = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
+		WritableRaster imgR = img.getRaster();
+		WritableRaster resR = result.getRaster();
 		
-		for(int levels = 0; levels < 255; levels++) {
-			int levels_ = 255;
-			while(levels_ >= 0 && cdfRef[levels_] < cdf[levels]) {
-				lt[levels] = levels_;
-				levels_ = levels_ - 1;
-			}
+		// set reference to a similar ratio of original
+		float ratio = cdf[255] / cdfRef[255];
+		for(int i = 0; i < 256; i++) {
+			cdfRef[i] = Math.round(cdfRef[i] * ratio);
 		}
 		
-		for(int i = 0; i < width; i++) {
+		// shift pixels in histogram to match similarly to target histogram
+		for(int i = 0; i < 256; i++) {
+			int levels = 255;
+			while(levels >=0 && cdfRef[levels] > cdf[i]) {
+				levels = levels - 1;
+			}
+			lt[i] = levels;
+		}
+	
+		for(int i = 0; i < width ; i++) {
 			for(int j = 0; j < height; j++) {
-				result.setRGB(i,j, (int) lt[img.getRGB(i,j) & 0xFF]);
+				resR.setSample(i, j, 0, lt[imgR.getSample(i, j, 0)]);
 			}
 		}
-		
-		result = convert(result);
-		
+		result.setData(resR);
 		return result;
 	}
+
+
 	
 	/*
 	 * Sets images into the browser array
@@ -236,7 +239,7 @@ public class Histogram {
 			labelText.add(labels.get(i));
 			images.add(equalize(bufImage.get(i)));
 			labelText.add("Histogram Equalization: " + labels.get(i));
-			images.add(match(bufImage.get(i), hist(bufImage.get(1))));
+			images.add(match(bufImage.get(i), hist(bufImage.get(2))));
 			labelText.add("Histogram Matching: " + labels.get(i));
 		}
 	}
@@ -277,7 +280,7 @@ public class Histogram {
 	 */
 	public static void controller() {
 		
-		double[] histogram = hist(images.get(index));
+		int[] histogram = hist(images.get(index));
 	    
 		label.setIcon(new ImageIcon(images.get(index)));
 		frame.getContentPane().add(label);
@@ -286,7 +289,7 @@ public class Histogram {
 		
 		System.out.println((index + 1)  + " " + labelText.get(index));
 	    
-		for(double x : histogram) {
+		for(int x : histogram) {
 	    	System.out.print(x + "|");
 	    }
 		
